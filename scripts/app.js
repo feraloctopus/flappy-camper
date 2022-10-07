@@ -3,6 +3,9 @@ import { ctx, CANVAS_HEIGHT, CANVAS_WIDTH } from "./constants.js";
 import { game } from "./game.js";
 import { ObstacleManager } from "./obstacles/obstacle-manager.js";
 
+// 1923 x 1626
+// 641 X 542 for each frame
+
 class Player {
 	/**
 	 * @param {CanvasRenderingContext2D} ctx
@@ -11,7 +14,7 @@ class Player {
 		this.ctx = ctx;
 
 		this.h = 32;
-		this.w = this.h * 2;
+		this.w = 32;
 
 		this.x = 150;
 		this.y = CANVAS_HEIGHT / 2 + this.h / 2;
@@ -22,10 +25,43 @@ class Player {
 
 		this.dust = [];
 
+		this.image = {
+			/** @type {HTMLImageElement} */ //@ts-ignore
+			src: document.getElementById("player-run"),
+			fps: 15,
+			frames: [
+				{ x: 0, y: 0 },
+				{ x: 641, y: 0 },
+				{ x: 1282, y: 0 },
+				{ x: 0, y: 542 },
+				{ x: 641, y: 542 },
+				{ x: 1282, y: 542 },
+				{ x: 0, y: 1084 },
+				{ x: 641, y: 1084 },
+			],
+			currentFrame: 0,
+			lastFrameChange: 0,
+			xOffset: -33,
+			yOffset: -65,
+			next: function (timeElapsed) {
+				this.lastFrameChange += timeElapsed;
+				if (this.lastFrameChange < 1000 / this.fps) return;
+				this.lastFrameChange = 0;
+
+				this.currentFrame++;
+				if (this.currentFrame >= this.frames.length) {
+					this.currentFrame = 0;
+				}
+			},
+		};
+
 		this.wireUpEvents();
 	}
 
-	update() {
+	/**
+	 * @param {number} timeElapsed
+	 */
+	update(timeElapsed) {
 		this.y += this.vy;
 		this.y = Math.min(this.y, this.maxY);
 		this.vy += 0.1;
@@ -34,9 +70,7 @@ class Player {
 		this.dust.forEach((p) => {
 			p.update();
 		});
-		this.dust = this.dust.filter((p) => {
-			p.isVisible;
-		});
+		this.dust = this.dust.filter((p) => p.isVisible);
 
 		if (Math.abs(this.vy) > this.vyMax) {
 			if (this.vy > 0) {
@@ -45,11 +79,26 @@ class Player {
 				this.vy = this.vyMax * -1;
 			}
 		}
+
+		this.image.next(timeElapsed);
 	}
 
 	draw() {
-		this.ctx.fillStyle = "red";
-		this.ctx.fillRect(this.x, this.y, this.w, this.h);
+		// this.ctx.fillStyle = "red";
+		// this.ctx.fillRect(this.x, this.y, this.w, this.h);
+
+		this.ctx.drawImage(
+			this.image.src, // the image we want to draw
+			this.image.frames[this.image.currentFrame].x, // x coord of where to start our clip
+			this.image.frames[this.image.currentFrame].y, // y coord of where to start our clip
+			641, // x coord of where to end our clip
+			542, // y coord of where to end our clip
+			this.x + this.image.xOffset, // this the x coord of where to place the image
+			this.y + this.image.yOffset, // this the y coord of where to place the image
+			100, // the width of the image
+			100 // the height of the image
+		);
+
 		this.dust.forEach((p) => {
 			p.draw();
 		});
@@ -93,8 +142,8 @@ class Particle {
 		this.color = color;
 		this.ctx = ctx;
 
-		this.yChange = (Math.random() * 2 + 0.2) * -1;
-		this.rChange = Math.random() * 3 + 1;
+		this.yChange = (Math.random() * 5 + 0.2) * -1;
+		this.rChange = Math.random() * 0.5 + 1;
 
 		this.isVisible = true;
 		this.opacity = 1;
@@ -105,13 +154,16 @@ class Particle {
 		this.x -= game.gameSpeed;
 		this.y += this.yChange;
 		this.r += this.rChange;
+
 		this.opacity -= this.opacityChange;
+		if (this.opacity < 0) this.opacity = 0;
+
 		this.isVisible = this.x + this.r > 0 || this.opacity > 0;
 	}
 
 	draw() {
 		this.ctx.save();
-		this.ctx.globalAlpha = 1;
+		this.ctx.globalAlpha = this.opacity;
 		this.ctx.fillStyle = this.color;
 		this.ctx.beginPath();
 		this.ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2, true);
@@ -126,6 +178,7 @@ class HappyDust extends Particle {
 	 */
 	constructor(player) {
 		super(player.x, player.y + player.h, 2, "pink", player.ctx);
+		this.color = "hsl(" + Math.floor(Math.random() * 360) + ", 100%, 50%)";
 	}
 }
 
@@ -133,15 +186,22 @@ let manager = new ObstacleManager(ctx);
 manager.init();
 
 let p = new Player(ctx);
+let currentTime = 0;
 
-function animate() {
+/**
+ * @param {number} timestamp
+ */
+function animate(timestamp) {
+	let timeElapsed = timestamp - currentTime;
+	currentTime = timestamp;
+
 	// clear the screen
 	ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
 	manager.update();
 	manager.draw();
 
-	p.update();
+	p.update(timeElapsed);
 	p.draw();
 
 	requestAnimationFrame(animate);
